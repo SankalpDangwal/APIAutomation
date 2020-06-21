@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>report.html</h1>
+    <p>Report generated on 21-Jun-2020 at 23:50:57 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.8.2", "pytest": "5.4.3"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.18362-SP0</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "2.1.1", "metadata": "1.9.0"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.8.2</td></tr></table>
+    <h2>Summary</h2>
+    <p>2 tests ran in 1.34 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">2 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">0 failed</span>, <input checked="true" class="filter" data-test-result="error" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">1 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="error results-table-row">
+        <tr>
+          <td class="col-result">Error</td>
+          <td class="col-name">test_Post.py::test_01_post_Call::setup</td>
+          <td class="col-duration">0.00</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">file C:\Users\sankalp.dangwal\PycharmProjects\APIAutomation2\API Calls\test_Post.py, line 8<br/>  def test_01_post_Call(self):<br/><span class="error">E       fixture &#x27;self&#x27; not found</span><br/>&gt;       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, extra, metadata, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory<br/>&gt;       use &#x27;pytest --fixtures [testpath]&#x27; for help on them.<br/><br/>C:\Users\sankalp.dangwal\PycharmProjects\APIAutomation2\API Calls\test_Post.py:8<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_Get.py::test_02_getdetails</td>
+          <td class="col-duration">0.44</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>b&#x27;{&quot;page&quot;:2,&quot;per_page&quot;:6,&quot;total&quot;:12,&quot;total_pages&quot;:2,&quot;data&quot;:[{&quot;id&quot;:7,&quot;email&quot;:&quot;michael.lawson@reqres.in&quot;,&quot;first_name&quot;:&quot;Michael&quot;,&quot;last_name&quot;:&quot;Lawson&quot;,&quot;avatar&quot;:&quot;https://s3.amazonaws.com/uifaces/faces/twitter/follettkyle/128.jpg&quot;},{&quot;id&quot;:8,&quot;email&quot;:&quot;lindsay.ferguson@reqres.in&quot;,&quot;first_name&quot;:&quot;Lindsay&quot;,&quot;last_name&quot;:&quot;Ferguson&quot;,&quot;avatar&quot;:&quot;https://s3.amazonaws.com/uifaces/faces/twitter/araa3185/128.jpg&quot;},{&quot;id&quot;:9,&quot;email&quot;:&quot;tobias.funke@reqres.in&quot;,&quot;first_name&quot;:&quot;Tobias&quot;,&quot;last_name&quot;:&quot;Funke&quot;,&quot;avatar&quot;:&quot;https://s3.amazonaws.com/uifaces/faces/twitter/vivekprvr/128.jpg&quot;},{&quot;id&quot;:10,&quot;email&quot;:&quot;byron.fields@reqres.in&quot;,&quot;first_name&quot;:&quot;Byron&quot;,&quot;last_name&quot;:&quot;Fields&quot;,&quot;avatar&quot;:&quot;https://s3.amazonaws.com/uifaces/faces/twitter/russoedu/128.jpg&quot;},{&quot;id&quot;:11,&quot;email&quot;:&quot;george.edwards@reqres.in&quot;,&quot;first_name&quot;:&quot;George&quot;,&quot;last_name&quot;:&quot;Edwards&quot;,&quot;avatar&quot;:&quot;https://s3.amazonaws.com/uifaces/faces/twitter/mrmoiree/128.jpg&quot;},{&quot;id&quot;:12,&quot;email&quot;:&quot;rachel.howell@reqres.in&quot;,&quot;first_name&quot;:&quot;Rachel&quot;,&quot;last_name&quot;:&quot;Howell&quot;,&quot;avatar&quot;:&quot;https://s3.amazonaws.com/uifaces/faces/twitter/hebertialmeida/128.jpg&quot;}],&quot;ad&quot;:{&quot;company&quot;:&quot;StatusCode Weekly&quot;,&quot;url&quot;:&quot;http://statuscode.org/&quot;,&quot;text&quot;:&quot;A weekly newsletter focusing on software development, infrastructure, the server, performance, and the stack end of things.&quot;}}&#x27;
+{&#x27;Date&#x27;: &#x27;Sun, 21 Jun 2020 18:20:55 GMT&#x27;, &#x27;Content-Type&#x27;: &#x27;application/json; charset=utf-8&#x27;, &#x27;Transfer-Encoding&#x27;: &#x27;chunked&#x27;, &#x27;Connection&#x27;: &#x27;keep-alive&#x27;, &#x27;Set-Cookie&#x27;: &#x27;__cfduid=d298c597b732eaa656aacc0633a4358281592763655; expires=Tue, 21-Jul-20 18:20:55 GMT; path=/; domain=.reqres.in; HttpOnly; SameSite=Lax; Secure&#x27;, &#x27;X-Powered-By&#x27;: &#x27;Express&#x27;, &#x27;Access-Control-Allow-Origin&#x27;: &#x27;*&#x27;, &#x27;Etag&#x27;: &#x27;W/&quot;4dd-IPv5LdOOb6s5S9E3i59wBCJ1k/0&quot;&#x27;, &#x27;Via&#x27;: &#x27;1.1 vegur&#x27;, &#x27;Cache-Control&#x27;: &#x27;max-age=14400&#x27;, &#x27;CF-Cache-Status&#x27;: &#x27;HIT&#x27;, &#x27;Age&#x27;: &#x27;4734&#x27;, &#x27;cf-request-id&#x27;: &#x27;0379b5be1a0000df3efc972200000001&#x27;, &#x27;Expect-CT&#x27;: &#x27;max-age=604800, report-uri=&quot;https://report-uri.cloudflare.com/cdn-cgi/beacon/expect-ct&quot;&#x27;, &#x27;Vary&#x27;: &#x27;Accept-Encoding&#x27;, &#x27;Server&#x27;: &#x27;cloudflare&#x27;, &#x27;CF-RAY&#x27;: &#x27;5a6fbf102b89df3e-BOM&#x27;, &#x27;Content-Encoding&#x27;: &#x27;gzip&#x27;}
+200
+None
+cloudflare
+&lt;RequestsCookieJar[&lt;Cookie __cfduid=d298c597b732eaa656aacc0633a4358281592763655 for .reqres.in/&gt;]&gt;
+utf-8
+0:00:00.432467
+{&#x27;page&#x27;: 2, &#x27;per_page&#x27;: 6, &#x27;total&#x27;: 12, &#x27;total_pages&#x27;: 2, &#x27;data&#x27;: [{&#x27;id&#x27;: 7, &#x27;email&#x27;: &#x27;michael.lawson@reqres.in&#x27;, &#x27;first_name&#x27;: &#x27;Michael&#x27;, &#x27;last_name&#x27;: &#x27;Lawson&#x27;, &#x27;avatar&#x27;: &#x27;https://s3.amazonaws.com/uifaces/faces/twitter/follettkyle/128.jpg&#x27;}, {&#x27;id&#x27;: 8, &#x27;email&#x27;: &#x27;lindsay.ferguson@reqres.in&#x27;, &#x27;first_name&#x27;: &#x27;Lindsay&#x27;, &#x27;last_name&#x27;: &#x27;Ferguson&#x27;, &#x27;avatar&#x27;: &#x27;https://s3.amazonaws.com/uifaces/faces/twitter/araa3185/128.jpg&#x27;}, {&#x27;id&#x27;: 9, &#x27;email&#x27;: &#x27;tobias.funke@reqres.in&#x27;, &#x27;first_name&#x27;: &#x27;Tobias&#x27;, &#x27;last_name&#x27;: &#x27;Funke&#x27;, &#x27;avatar&#x27;: &#x27;https://s3.amazonaws.com/uifaces/faces/twitter/vivekprvr/128.jpg&#x27;}, {&#x27;id&#x27;: 10, &#x27;email&#x27;: &#x27;byron.fields@reqres.in&#x27;, &#x27;first_name&#x27;: &#x27;Byron&#x27;, &#x27;last_name&#x27;: &#x27;Fields&#x27;, &#x27;avatar&#x27;: &#x27;https://s3.amazonaws.com/uifaces/faces/twitter/russoedu/128.jpg&#x27;}, {&#x27;id&#x27;: 11, &#x27;email&#x27;: &#x27;george.edwards@reqres.in&#x27;, &#x27;first_name&#x27;: &#x27;George&#x27;, &#x27;last_name&#x27;: &#x27;Edwards&#x27;, &#x27;avatar&#x27;: &#x27;https://s3.amazonaws.com/uifaces/faces/twitter/mrmoiree/128.jpg&#x27;}, {&#x27;id&#x27;: 12, &#x27;email&#x27;: &#x27;rachel.howell@reqres.in&#x27;, &#x27;first_name&#x27;: &#x27;Rachel&#x27;, &#x27;last_name&#x27;: &#x27;Howell&#x27;, &#x27;avatar&#x27;: &#x27;https://s3.amazonaws.com/uifaces/faces/twitter/hebertialmeida/128.jpg&#x27;}], &#x27;ad&#x27;: {&#x27;company&#x27;: &#x27;StatusCode Weekly&#x27;, &#x27;url&#x27;: &#x27;http://statuscode.org/&#x27;, &#x27;text&#x27;: &#x27;A weekly newsletter focusing on software development, infrastructure, the server, performance, and the stack end of things.&#x27;}}
+Michael
+Lindsay
+Tobias
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_Get.py::test_01_post_Call</td>
+          <td class="col-duration">0.52</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stdout call------------------------------ <br/>&lt;Response [200]&gt;
+b&#x27;{&quot;token&quot;:&quot;QpwL5tke4Pnpja7X4&quot;}&#x27;
+29
+{&#x27;token&#x27;: &#x27;QpwL5tke4Pnpja7X4&#x27;}
+<br/></div></td></tr></tbody></table></body></html>
